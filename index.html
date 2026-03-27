@@ -1061,15 +1061,12 @@
         color: color,
         metalness: 0.1,
         roughness: 0.55,
-        transparent: true,
-        opacity: 0.92,
         emissive: color,
         emissiveIntensity: 0.08,
-        side: THREE.DoubleSide,
       });
 
       const mesh = new THREE.Mesh(geo, material);
-      mesh.userData = { segmentIndex: i, baseEmissive: 0.08, baseOpacity: 0.92 };
+      mesh.userData = { segmentIndex: i, baseEmissive: 0.08 };
       bellGroup.add(mesh);
       segmentMeshes.push(mesh);
 
@@ -1256,9 +1253,7 @@
       segmentMeshes.forEach((mesh, i) => {
         const isActive = activeSegment === i;
         const targetEmissive = isActive ? 0.25 : mesh.userData.baseEmissive;
-        const targetOpacity = isActive ? 0.95 : mesh.userData.baseOpacity;
         mesh.material.emissiveIntensity += (targetEmissive - mesh.material.emissiveIntensity) * 0.08;
-        mesh.material.opacity += (targetOpacity - mesh.material.opacity) * 0.08;
       });
 
       if (intersects.length > 0) {
@@ -1266,7 +1261,6 @@
         const idx = hit.userData.segmentIndex;
         hoveredSegment = idx;
         hit.material.emissiveIntensity += (0.3 - hit.material.emissiveIntensity) * 0.15;
-        hit.material.opacity += (0.95 - hit.material.opacity) * 0.15;
         canvas.style.cursor = 'pointer';
       } else {
         canvas.style.cursor = 'default';
