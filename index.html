@@ -936,34 +936,38 @@
     renderer.toneMappingExposure = 1.0;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x060b18, 0.035);
+    scene.fog = new THREE.FogExp2(0x060b18, 0.018);
 
     const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
-    camera.position.set(0, 4.5, 10);
+    camera.position.set(0, 4.5, 11);
 
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.4;
-    controls.target.set(0, 1.5, 0);
-    controls.minDistance = 5;
-    controls.maxDistance = 25;
+    controls.target.set(0, 1.2, 0);
+    controls.minDistance = 7;
+    controls.maxDistance = 30;
     controls.maxPolarAngle = Math.PI * 0.75;
     controls.minPolarAngle = Math.PI * 0.1;
 
     // ── Lighting ─────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
-    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    mainLight.position.set(5, 8, 5);
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    mainLight.position.set(5, 10, 8);
     scene.add(mainLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8b9dc3, 0.4);
+    const fillLight = new THREE.DirectionalLight(0x8b9dc3, 0.6);
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.3);
+    const frontLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    frontLight.position.set(0, 2, 10);
+    scene.add(frontLight);
+
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
     rimLight.position.set(0, 2, -8);
     scene.add(rimLight);
 
@@ -983,103 +987,155 @@
       return (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((x - mu) / sigma) ** 2);
     }
 
-    const SCALE_Y = 8; // Height multiplier
-    const DEPTH = 2.5; // Extrusion depth
-
-    // ── Build Bell Curve Segments ─────────────────────────
-    const bellGroup = new THREE.Group();
-    const segmentMeshes = [];
-
-    SEGMENTS.forEach((seg, i) => {
-      const shape = new THREE.Shape();
-      const steps = 120;
-      const xStart = seg.range[0];
-      const xEnd = seg.range[1];
-      const dx = (xEnd - xStart) / steps;
-
-      shape.moveTo(xStart, 0);
-      for (let j = 0; j <= steps; j++) {
-        const x = xStart + dx * j;
-        const y = gaussian(x) * SCALE_Y;
-        shape.lineTo(x, y);
-      }
-      shape.lineTo(xEnd, 0);
-      shape.lineTo(xStart, 0);
-
-      const extrudeSettings = {
-        depth: DEPTH,
-        bevelEnabled: true,
-        bevelThickness: 0.04,
-        bevelSize: 0.04,
-        bevelSegments: 3,
-      };
-
-      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-      const color = new THREE.Color(seg.color);
-
-      const material = new THREE.MeshPhysicalMaterial({
-        color: color,
-        metalness: 0.05,
-        roughness: 0.35,
-        transparent: true,
-        opacity: 0.82,
-        emissive: color,
-        emissiveIntensity: 0.08,
-        clearcoat: 0.3,
-        clearcoatRoughness: 0.4,
-      });
-
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.userData = { segmentIndex: i, baseEmissive: 0.08, baseOpacity: 0.82 };
-
-      // Center the extrusion depth
-      mesh.position.z = -DEPTH / 2;
-      bellGroup.add(mesh);
-      segmentMeshes.push(mesh);
-    });
-
-    scene.add(bellGroup);
-
-    // ── S-Curve (Cumulative) ──────────────────────────────
     function cumulativeGaussian(x) {
-      // Approximation of CDF
       const t = 1 / (1 + 0.2316419 * Math.abs(x));
       const d = 0.3989422804 * Math.exp(-x * x / 2);
       const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
       return x > 0 ? 1 - p : p;
     }
 
+    const SCALE_Y = 5;
+    const Z_WIDTH = 3;
+    const X_SEGS = 100;
+    const Z_SEGS = 40;
+
+    // ── Build 3D Bell Curve as Terrain Surface ─────────────
+    const bellGroup = new THREE.Group();
+    const segmentMeshes = [];
+
+    // Height function: Gaussian in X, smooth falloff in Z (creates a ridge)
+    function heightAt(x, z) {
+      const gx = gaussian(x) * SCALE_Y;
+      const zNorm = z / (Z_WIDTH / 2); // -1 to 1
+      const zFalloff = Math.max(0, 1 - zNorm * zNorm); // parabolic falloff
+      return gx * Math.pow(zFalloff, 0.6);
+    }
+
+    SEGMENTS.forEach((seg, i) => {
+      const xStart = seg.range[0];
+      const xEnd = seg.range[1];
+      const xSteps = Math.ceil(X_SEGS * (xEnd - xStart) / 7);
+      const zSteps = Z_SEGS;
+      const dx = (xEnd - xStart) / xSteps;
+      const dz = Z_WIDTH / zSteps;
+
+      // Custom BufferGeometry for terrain strip
+      const vertices = [];
+      const normals = [];
+      const indices = [];
+
+      for (let zi = 0; zi <= zSteps; zi++) {
+        for (let xi = 0; xi <= xSteps; xi++) {
+          const x = xStart + xi * dx;
+          const z = -Z_WIDTH / 2 + zi * dz;
+          const y = heightAt(x, z);
+          vertices.push(x, y, z);
+
+          // Compute normal via finite differences
+          const eps = 0.01;
+          const dydx = (heightAt(x + eps, z) - heightAt(x - eps, z)) / (2 * eps);
+          const dydz = (heightAt(x, z + eps) - heightAt(x, z - eps)) / (2 * eps);
+          const n = new THREE.Vector3(-dydx, 1, -dydz).normalize();
+          normals.push(n.x, n.y, n.z);
+        }
+      }
+
+      for (let zi = 0; zi < zSteps; zi++) {
+        for (let xi = 0; xi < xSteps; xi++) {
+          const a = zi * (xSteps + 1) + xi;
+          const b = a + 1;
+          const c = a + (xSteps + 1);
+          const d = c + 1;
+          indices.push(a, c, b);
+          indices.push(b, c, d);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geo.setIndex(indices);
+
+      const color = new THREE.Color(seg.color);
+      const material = new THREE.MeshPhysicalMaterial({
+        color: color,
+        metalness: 0.2,
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0.9,
+        emissive: color,
+        emissiveIntensity: 0.12,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.2,
+        side: THREE.DoubleSide,
+      });
+
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.userData = { segmentIndex: i, baseEmissive: 0.12, baseOpacity: 0.9 };
+      bellGroup.add(mesh);
+      segmentMeshes.push(mesh);
+
+      // Wireframe overlay for depth
+      const wireMat = new THREE.MeshBasicMaterial({
+        color: color, wireframe: true, transparent: true, opacity: 0.06
+      });
+      bellGroup.add(new THREE.Mesh(geo, wireMat));
+
+      // Edge glow line at the top ridge (z=0 cross section)
+      const ridgePoints = [];
+      for (let xi = 0; xi <= xSteps; xi++) {
+        const x = xStart + xi * dx;
+        const y = heightAt(x, 0);
+        ridgePoints.push(new THREE.Vector3(x, y + 0.02, 0));
+      }
+      const ridgeLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(ridgePoints),
+        new THREE.LineBasicMaterial({ color: color.clone().multiplyScalar(1.5), transparent: true, opacity: 0.5 })
+      );
+      bellGroup.add(ridgeLine);
+    });
+
+    // Divider lines between segments (vertical glowing lines)
+    const dividerXs = [-2.0, -0.67, 0.67, 2.0];
+    dividerXs.forEach(x => {
+      const pts = [];
+      for (let zi = 0; zi <= 20; zi++) {
+        const z = -Z_WIDTH / 2 + (Z_WIDTH * zi / 20);
+        const y = heightAt(x, z);
+        pts.push(new THREE.Vector3(x, y + 0.03, z));
+      }
+      bellGroup.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 })
+      ));
+    });
+
+    scene.add(bellGroup);
+
+    // ── S-Curve (Cumulative) floating line ──────────────────
     const sCurvePoints = [];
     for (let i = 0; i <= 200; i++) {
       const x = -3.5 + (7 * i / 200);
       const y = cumulativeGaussian(x) * SCALE_Y * gaussian(0) * 0.95;
-      sCurvePoints.push(new THREE.Vector3(x, y + 0.05, DEPTH / 2 + 0.3));
+      sCurvePoints.push(new THREE.Vector3(x, y + 0.1, Z_WIDTH / 2 + 0.5));
     }
-
     const sCurve = new THREE.CatmullRomCurve3(sCurvePoints);
-    const sCurveGeo = new THREE.TubeGeometry(sCurve, 200, 0.025, 8, false);
-    const sCurveMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.25,
-    });
-    const sCurveMesh = new THREE.Mesh(sCurveGeo, sCurveMat);
-    scene.add(sCurveMesh);
+    const sCurveGeo = new THREE.TubeGeometry(sCurve, 200, 0.03, 8, false);
+    scene.add(new THREE.Mesh(sCurveGeo, new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.3
+    })));
 
-    // S-Curve label dots at thresholds
-    const thresholds = [
-      { x: -2.0, label: '2.5%', color: 0xa78bfa },
-      { x: -1.0, label: '16%', color: 0x38bdf8 },
-      { x: 0, label: '50%', color: 0x34d399 },
-      { x: 1.0, label: '84%', color: 0xfbbf24 },
-    ];
-    thresholds.forEach(th => {
+    // S-Curve threshold dots
+    [
+      { x: -2.0, color: 0xa78bfa }, { x: -1.0, color: 0x38bdf8 },
+      { x: 0, color: 0x34d399 }, { x: 1.0, color: 0xfbbf24 },
+    ].forEach(th => {
       const y = cumulativeGaussian(th.x) * SCALE_Y * gaussian(0) * 0.95;
       const dot = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 16, 16),
+        new THREE.SphereGeometry(0.07, 16, 16),
         new THREE.MeshBasicMaterial({ color: th.color })
       );
-      dot.position.set(th.x, y + 0.05, DEPTH / 2 + 0.3);
+      dot.position.set(th.x, y + 0.1, Z_WIDTH / 2 + 0.5);
       scene.add(dot);
     });
 
@@ -1087,13 +1143,6 @@
     const gridHelper = new THREE.GridHelper(30, 30, 0x1a2744, 0x0f1a2e);
     gridHelper.position.y = -0.01;
     scene.add(gridHelper);
-
-    // Axis labels on ground
-    const axisMat = new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.4 });
-    [-3, -2, -1, 0, 1, 2, 3].forEach(x => {
-      const pts = [new THREE.Vector3(x, 0, -DEPTH), new THREE.Vector3(x, 0, DEPTH)];
-      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), axisMat));
-    });
 
     // ── Particles ─────────────────────────────────────────
     const PARTICLE_COUNT = 400;
@@ -1107,7 +1156,7 @@
         progress: Math.random(),
         speed: 0.001 + Math.random() * 0.003,
         yOffset: (Math.random() - 0.5) * 0.4,
-        zOffset: (Math.random() - 0.5) * DEPTH,
+        zOffset: (Math.random() - 0.5) * Z_WIDTH * 0.6,
       });
       particleSizes[i] = 2 + Math.random() * 3;
     }
@@ -1182,12 +1231,12 @@
       const xc = (seg.range[0] + seg.range[1]) / 2;
       const yTop = gaussian(xc) * SCALE_Y + 0.6;
       const sprite = createTextSprite(seg.name, seg.color, 0.55);
-      sprite.position.set(xc, yTop, DEPTH / 2 + 0.5);
+      sprite.position.set(xc, yTop, Z_WIDTH / 2 + 0.5);
       scene.add(sprite);
 
       // Percentage label
       const pctSprite = createTextSprite(seg.pct, 0xffffff, 0.35);
-      pctSprite.position.set(xc, yTop - 0.45, DEPTH / 2 + 0.5);
+      pctSprite.position.set(xc, yTop - 0.45, Z_WIDTH / 2 + 0.5);
       scene.add(pctSprite);
     });
 
@@ -1250,7 +1299,7 @@
       // Camera focus
       const xc = (seg.range[0] + seg.range[1]) / 2;
       controls.autoRotate = false;
-      gsapTo(controls.target, { x: xc, y: 1.5, z: 0 }, 0.02);
+      gsapTo(controls.target, { x: xc, y: 1.2, z: 0 }, 0.04);
     }
 
     function deselectSegment() {
@@ -1258,7 +1307,7 @@
       document.getElementById('segment-detail').classList.remove('visible');
       document.querySelectorAll('.segment-card').forEach(c => c.classList.remove('active'));
       controls.autoRotate = true;
-      gsapTo(controls.target, { x: 0, y: 1.5, z: 0 }, 0.02);
+      gsapTo(controls.target, { x: 0, y: 1.2, z: 0 }, 0.04);
     }
 
     // Simple lerp helper (no dependency)
@@ -1324,12 +1373,12 @@
           pd.progress = 0;
           pd.speed = 0.001 + Math.random() * 0.003;
           pd.yOffset = (Math.random() - 0.5) * 0.4;
-          pd.zOffset = (Math.random() - 0.5) * DEPTH;
+          pd.zOffset = (Math.random() - 0.5) * Z_WIDTH * 0.6;
         }
 
         const x = -3.5 + pd.progress * 7;
-        const y = gaussian(x) * SCALE_Y + pd.yOffset;
         const z = pd.zOffset;
+        const y = heightAt(x, z) + pd.yOffset * 0.3 + 0.15;
 
         particlePositions[i * 3] = x;
         particlePositions[i * 3 + 1] = y + 0.1;
