@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diffusion of Innovations — Development Economics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #060b18;
+      --bg-card: rgba(15, 23, 42, 0.75);
+      --bg-card-hover: rgba(30, 41, 59, 0.85);
+      --border: rgba(148, 163, 184, 0.12);
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --innovators: #a78bfa;
+      --early-adopters: #38bdf8;
+      --early-majority: #34d399;
+      --late-majority: #fbbf24;
+      --laggards: #f87171;
+      --glow-innovators: rgba(167,139,250,0.3);
+      --glow-early-adopters: rgba(56,189,248,0.3);
+      --glow-early-majority: rgba(52,211,153,0.3);
+      --glow-late-majority: rgba(251,191,36,0.3);
+      --glow-laggards: rgba(248,113,113,0.3);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg-primary);
+      font-family: 'Inter', -apple-system, sans-serif;
+      color: var(--text-primary);
+    }
+
+    canvas#main-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+    }
+
+    #ui-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 280px 1fr 300px;
+      grid-template-areas:
+        "top top top"
+        "left center right"
+        "bottom bottom bottom";
+      gap: 0;
+      padding: 16px;
+    }
+
+    #ui-overlay > * { pointer-events: auto; }
+
+    /* Top Bar */
+    #top-bar {
+      grid-area: top;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+
+    #top-bar .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #top-bar .logo svg {
+      width: 28px; height: 28px;
+    }
+
+    #top-bar .logo-text {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    #top-bar .nav-links {
+      display: flex;
+      gap: 6px;
+    }
+
+    #top-bar .nav-links a {
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    #top-bar .nav-links a.active {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--early-adopters);
+    }
+
+    #top-bar .nav-links a:hover {
+      color: var(--text-primary);
+      background: rgba(255,255,255,0.05);
+    }
+
+    #top-bar .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    #top-bar .live-badge .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 8px rgba(52,211,153,0.6);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Left Panel */
+    #left-panel {
+      grid-area: left;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+      padding-right: 12px;
+      scrollbar-width: none;
+    }
+    #left-panel::-webkit-scrollbar { display: none; }
+
+    .segment-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .segment-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      border-radius: 3px 0 0 3px;
+      transition: width 0.3s;
+    }
+
+    .segment-card[data-segment="innovators"]::before { background: var(--innovators); }
+    .segment-card[data-segment="early-adopters"]::before { background: var(--early-adopters); }
+    .segment-card[data-segment="early-majority"]::before { background: var(--early-majority); }
+    .segment-card[data-segment="late-majority"]::before { background: var(--late-majority); }
+    .segment-card[data-segment="laggards"]::before { background: var(--laggards); }
+
+    .segment-card:hover, .segment-card.active {
+      background: var(--bg-card-hover);
+      border-color: rgba(148, 163, 184, 0.25);
+      transform: translateX(4px);
+    }
+
+    .segment-card.active::before { width: 5px; }
+
+    .segment-card .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .segment-card .seg-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .segment-card[data-segment="innovators"] .seg-name { color: var(--innovators); }
+    .segment-card[data-segment="early-adopters"] .seg-name { color: var(--early-adopters); }
+    .segment-card[data-segment="early-majority"] .seg-name { color: var(--early-majority); }
+    .segment-card[data-segment="late-majority"] .seg-name { color: var(--late-majority); }
+    .segment-card[data-segment="laggards"] .seg-name { color: var(--laggards); }
+
+    .segment-card .seg-pct {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .segment-card .seg-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-top: 4px;
+    }
+
+    .segment-card .seg-example {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+      font-style: italic;
+    }
+
+    /* Center - detail popup */
+    #center-area {
+      grid-area: center;
+      position: relative;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 20px;
+    }
+
+    #segment-detail {
+      pointer-events: auto;
+      background: var(--bg-card);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 480px;
+      width: 100%;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      display: none;
+    }
+
+    #segment-detail.visible {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #segment-detail .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    #segment-detail .detail-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    #segment-detail .detail-pct {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      opacity: 0.7;
+    }
+
+    #segment-detail .detail-theory {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    #segment-detail .detail-case {
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      padding: 14px;
+      border: 1px solid var(--border);
+    }
+
+    #segment-detail .case-label {
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    #segment-detail .case-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    #segment-detail .case-region {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    #segment-detail .case-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    #segment-detail .case-stat {
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    #segment-detail .stat-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    #segment-detail .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .detail-close {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      color: var(--text-secondary);
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .detail-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+
+    /* Right Panel */
+    #right-panel {
+      grid-area: right;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      padding-left: 12px;
+      scrollbar-width: none;
+    }
+    #right-panel::-webkit-scrollbar { display: none; }
+
+    .info-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .info-card .card-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .info-card .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .info-card .metric-row:last-child { border-bottom: none; }
+
+    .metric-row .metric-name {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .metric-row .metric-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .metric-row .metric-change {
+      font-size: 11px;
+      margin-left: 6px;
+    }
+
+    .metric-row .metric-change.positive { color: #34d399; }
+    .metric-row .metric-change.negative { color: #f87171; }
+
+    /* Progress bars */
+    .progress-item {
+      margin-bottom: 10px;
+    }
+    .progress-item:last-child { margin-bottom: 0; }
+
+    .progress-item .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .progress-item .progress-name { color: var(--text-secondary); }
+    .progress-item .progress-value { color: var(--text-primary); font-weight: 600; font-family: 'Space Grotesk', sans-serif; }
+
+    .progress-bar {
+      height: 4px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* S-Curve mini */
+    .s-curve-mini {
+      width: 100%;
+      height: 80px;
+      position: relative;
+    }
+
+    .s-curve-mini svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Theory box */
+    .theory-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .theory-text strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .theory-cite {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      font-style: italic;
+    }
+
+    /* Bottom Ticker */
+    #bottom-bar {
+      grid-area: bottom;
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 20px;
+      margin-top: 12px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    #ticker {
+      display: inline-block;
+      animation: ticker-scroll 60s linear infinite;
+    }
+
+    @keyframes ticker-scroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-right: 40px;
+      font-size: 12px;
+    }
+
+    .ticker-item .ticker-label {
+      color: var(--text-muted);
+    }
+
+    .ticker-item .ticker-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .ticker-item .ticker-change {
+      font-size: 11px;
+    }
+    .ticker-item .ticker-change.positive { color: #34d399; }
+    .ticker-item .ticker-change.negative { color: #f87171; }
+
+    .ticker-sep {
+      display: inline-block;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      margin-right: 40px;
+      vertical-align: middle;
+    }
+
+    /* Instructions hint */
+    #instructions {
+      position: fixed;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      padding: 6px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      opacity: 1;
+      transition: opacity 1s;
+      pointer-events: none;
+    }
+
+    #instructions.hidden { opacity: 0; }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      #ui-overlay {
+        grid-template-columns: 240px 1fr 260px;
+      }
+    }
+
+    @media (max-width: 900px) {
+      #ui-overlay {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr auto auto;
+        grid-template-areas: "top" "left" "center" "right" "bottom";
+      }
+      #left-panel, #right-panel {
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 0;
+      }
+      .segment-card, .info-card { min-width: 200px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="main-canvas"></canvas>
+
+  <div id="ui-overlay">
+    <!-- Top Bar -->
+    <div id="top-bar">
+      <div class="logo">
+        <svg viewBox="0 0 28 28" fill="none">
+          <circle cx="14" cy="14" r="13" stroke="#38bdf8" stroke-width="1.5"/>
+          <path d="M7 18 Q14 4 21 18" stroke="#34d399" stroke-width="2" fill="none"/>
+          <path d="M7 18 Q14 10 21 18" stroke="#a78bfa" stroke-width="1.5" fill="none" opacity="0.5"/>
+        </svg>
+        <span class="logo-text">Diffusion of Innovations</span>
+      </div>
+      <div class="nav-links">
+        <a class="active">Model</a>
+        <a>Adoption Curves</a>
+        <a>Case Studies</a>
+        <a>Economics</a>
+      </div>
+      <div class="live-badge">
+        <span class="dot"></span>
+        <span>INTERACTIVE</span>
+        <span id="clock" style="font-family:'Space Grotesk',sans-serif; font-weight:600;"></span>
+      </div>
+    </div>
+
+    <!-- Left Panel: Segments -->
+    <div id="left-panel">
+      <div class="segment-card" data-segment="innovators" data-index="0">
+        <div class="card-header">
+          <span class="seg-name">Innovators</span>
+          <span class="seg-pct">2.5%</span>
+        </div>
+        <div class="seg-desc">Risk-takers and visionaries who are first to adopt new technologies. High social capital, financial liquidity, and tolerance for uncertainty.</div>
+        <div class="seg-example">📱 M-Pesa pilot users in Kenya, 2007 — first mobile money adopters</div>
+      </div>
+
+      <div class="segment-card" data-segment="early-adopters" data-index="1">
+        <div class="card-header">
+          <span class="seg-name">Early Adopters</span>
+          <span class="seg-pct">13.5%</span>
+        </div>
+        <div class="seg-desc">Opinion leaders who see the strategic potential. They reduce uncertainty for others by evaluating and endorsing innovations.</div>
+        <div class="seg-example">☀️ Grameen Shakti solar adopters, Bangladesh — community leaders demonstrating off-grid solutions</div>
+      </div>
+
+      <div class="segment-card" data-segment="early-majority" data-index="2">
+        <div class="card-header">
+          <span class="seg-name">Early Majority</span>
+          <span class="seg-pct">34%</span>
+        </div>
+        <div class="seg-desc">Pragmatic adopters who follow proven results. They adopt just before the average member and are critical for reaching scale.</div>
+        <div class="seg-example">🌐 Mobile internet users across Sub-Saharan Africa — 300M+ subscribers by 2025</div>
+      </div>
+
+      <div class="segment-card" data-segment="late-majority" data-index="3">
+        <div class="card-header">
+          <span class="seg-name">Late Majority</span>
+          <span class="seg-pct">34%</span>
+        </div>
+        <div class="seg-desc">Skeptical adopters driven by economic necessity and social pressure. Often require significant support infrastructure.</div>
+        <div class="seg-example">📲 Rural India smartphone adoption — driven by digital payments mandate and subsidies</div>
+      </div>
+
+      <div class="segment-card" data-segment="laggards" data-index="4">
+        <div class="card-header">
+          <span class="seg-name">Laggards</span>
+          <span class="seg-pct">16%</span>
+        </div>
+        <div class="seg-desc">Traditional and resource-constrained. Adoption barriers include infrastructure gaps, literacy, and systemic exclusion.</div>
+        <div class="seg-example">🏦 1.4B globally unbanked — structural barriers persist in LDCs</div>
+      </div>
+    </div>
+
+    <!-- Center Detail -->
+    <div id="center-area">
+      <div id="segment-detail">
+        <div class="detail-header">
+          <div>
+            <div class="detail-title" id="detail-title"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="detail-pct" id="detail-pct"></span>
+            <button class="detail-close" id="detail-close">✕</button>
+          </div>
+        </div>
+        <div class="detail-theory" id="detail-theory"></div>
+        <div class="detail-case">
+          <div class="case-label">DEVELOPMENT ECONOMICS CASE STUDY</div>
+          <div class="case-title" id="case-title"></div>
+          <div class="case-region" id="case-region"></div>
+          <div class="case-stats" id="case-stats"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div id="right-panel">
+      <div class="info-card">
+        <div class="card-label">Rogers' Theory (1962)</div>
+        <div class="theory-text">
+          The <strong>Diffusion of Innovations</strong> explains how new ideas and technologies spread through societies via a predictable adoption lifecycle. In development economics, this framework maps how transformative technologies — mobile banking, solar energy, digital payments — reach billions.
+        </div>
+        <div class="theory-cite">— Everett M. Rogers, "Diffusion of Innovations" (5th ed., 2003)</div>
+      </div>
+
+      <div class="info-card">
+        <div class="card-label">S-Curve: Cumulative Adoption</div>
+        <div class="s-curve-mini">
+          <svg viewBox="0 0 260 80">
+            <defs>
+              <linearGradient id="s-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#a78bfa"/>
+                <stop offset="16%" stop-color="#38bdf8"/>
+                <stop offset="50%" stop-color="#34d399"/>
+                <stop offset="84%" stop-color="#fbbf24"/>
+                <stop offset="100%" stop-color="#f87171"/>
+              </linearGradient>
+            </defs>
+            <path d="M10 72 Q30 72 50 70 Q70 65 90 55 Q120 35 140 20 Q165 8 190 6 Q220 5 250 5" stroke="url(#s-grad)" stroke-width="2.5" fill="none"/>
+            <text x="10" y="10" fill="#64748b" font-size="8" font-family="Space Grotesk">100%</text>
+            <text x="10" y="78" fill="#64748b" font-size="8" font-family="Space Grotesk">0%</text>
+            <!-- Threshold markers -->
+            <line x1="52" y1="0" x2="52" y2="80" stroke="#64748b" stroke-width="0.5" stroke-dasharray="2"/>
+            <text x="44" y="78" fill="#a78bfa" font-size="6">2.5%</text>
+            <line x1="88" y1="0" x2="88" y2="80" stroke="#64748b" stroke-width="0.5" stroke-dasharray="2"/>
+            <text x="78" y="78" fill="#38bdf8" font-size="6">16%</text>
+            <line x1="140" y1="0" x2="140" y2="80" stroke="#64748b" stroke-width="0.5" stroke-dasharray="2"/>
+            <text x="130" y="78" fill="#34d399" font-size="6">50%</text>
+            <line x1="192" y1="0" x2="192" y2="80" stroke="#64748b" stroke-width="0.5" stroke-dasharray="2"/>
+            <text x="182" y="78" fill="#fbbf24" font-size="6">84%</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="card-label">Global Technology Adoption</div>
+        <div class="progress-item">
+          <div class="progress-header">
+            <span class="progress-name">Mobile Money (Developing)</span>
+            <span class="progress-value">57%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:0%; background: linear-gradient(90deg, #a78bfa, #38bdf8);" data-target="57"></div>
+          </div>
+        </div>
+        <div class="progress-item">
+          <div class="progress-header">
+            <span class="progress-name">Internet Access (Global South)</span>
+            <span class="progress-value">62%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:0%; background: linear-gradient(90deg, #38bdf8, #34d399);" data-target="62"></div>
+          </div>
+        </div>
+        <div class="progress-item">
+          <div class="progress-header">
+            <span class="progress-name">Off-Grid Solar (Sub-Saharan)</span>
+            <span class="progress-value">34%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:0%; background: linear-gradient(90deg, #34d399, #fbbf24);" data-target="34"></div>
+          </div>
+        </div>
+        <div class="progress-item">
+          <div class="progress-header">
+            <span class="progress-name">Digital ID Systems</span>
+            <span class="progress-value">78%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:0%; background: linear-gradient(90deg, #fbbf24, #f87171);" data-target="78"></div>
+          </div>
+        </div>
+        <div class="progress-item">
+          <div class="progress-header">
+            <span class="progress-name">E-Commerce (Emerging Markets)</span>
+            <span class="progress-value">41%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:0%; background: linear-gradient(90deg, #a78bfa, #34d399);" data-target="41"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="card-label">Key Indicators</div>
+        <div class="metric-row">
+          <span class="metric-name">Global Internet Users</span>
+          <span><span class="metric-value">5.6B</span><span class="metric-change positive">+4.1%</span></span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Mobile Money Accounts</span>
+          <span><span class="metric-value">1.75B</span><span class="metric-change positive">+12.7%</span></span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Off-Grid Solar Users</span>
+          <span><span class="metric-value">490M</span><span class="metric-change positive">+8.3%</span></span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Unbanked Population</span>
+          <span><span class="metric-value">1.4B</span><span class="metric-change negative">-3.2%</span></span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">India UPI Transactions</span>
+          <span><span class="metric-value">$2.2T</span><span class="metric-change positive">+46%</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Ticker -->
+    <div id="bottom-bar">
+      <div id="ticker">
+        <span class="ticker-item"><span class="ticker-label">Kenya M-Pesa Penetration</span><span class="ticker-value">76%</span><span class="ticker-change positive">of adults</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Bangladesh Solar Homes</span><span class="ticker-value">6M+</span><span class="ticker-change positive">+18% YoY</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Sub-Saharan Mobile Subscribers</span><span class="ticker-value">527M</span><span class="ticker-change positive">+4.6%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">India Aadhaar IDs</span><span class="ticker-value">1.38B</span><span class="ticker-change positive">99% coverage</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Rwanda Drone Deliveries</span><span class="ticker-value">4.8M</span><span class="ticker-change positive">Zipline medical</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Nigeria Fintech Users</span><span class="ticker-value">65M</span><span class="ticker-change positive">+32%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Global Remittances</span><span class="ticker-value">$857B</span><span class="ticker-change positive">+3.8%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">China Rural E-Commerce</span><span class="ticker-value">$420B</span><span class="ticker-change positive">+21%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Africa Startup Funding</span><span class="ticker-value">$7.2B</span><span class="ticker-change positive">+19%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">LatAm Digital Banking</span><span class="ticker-value">284M</span><span class="ticker-change positive">+28%</span></span>
+        <span class="ticker-sep"></span>
+        <!-- Duplicate for seamless scroll -->
+        <span class="ticker-item"><span class="ticker-label">Kenya M-Pesa Penetration</span><span class="ticker-value">76%</span><span class="ticker-change positive">of adults</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Bangladesh Solar Homes</span><span class="ticker-value">6M+</span><span class="ticker-change positive">+18% YoY</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Sub-Saharan Mobile Subscribers</span><span class="ticker-value">527M</span><span class="ticker-change positive">+4.6%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">India Aadhaar IDs</span><span class="ticker-value">1.38B</span><span class="ticker-change positive">99% coverage</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Rwanda Drone Deliveries</span><span class="ticker-value">4.8M</span><span class="ticker-change positive">Zipline medical</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Nigeria Fintech Users</span><span class="ticker-value">65M</span><span class="ticker-change positive">+32%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Global Remittances</span><span class="ticker-value">$857B</span><span class="ticker-change positive">+3.8%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">China Rural E-Commerce</span><span class="ticker-value">$420B</span><span class="ticker-change positive">+21%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">Africa Startup Funding</span><span class="ticker-value">$7.2B</span><span class="ticker-change positive">+19%</span></span>
+        <span class="ticker-sep"></span>
+        <span class="ticker-item"><span class="ticker-label">LatAm Digital Banking</span><span class="ticker-value">284M</span><span class="ticker-change positive">+28%</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="instructions">Click or hover on the 3D curve segments • Drag to orbit • Scroll to zoom</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ── Data ──────────────────────────────────────────────
+    const SEGMENTS = [
+      {
+        key: 'innovators', name: 'Innovators', pct: '2.5%',
+        color: 0xa78bfa, range: [-3.5, -2.0],
+        theory: 'Innovators represent the first 2.5% of adopters. They are venturesome, have access to financial resources, and can absorb the risk of failed innovations. In development economics, these are often diaspora returnees, NGO-backed pilot participants, or urban tech entrepreneurs who bridge global and local knowledge systems.',
+        case: {
+          title: 'M-Pesa Pilot Launch — Kenya, 2007',
+          region: 'East Africa • Mobile Financial Services',
+          stats: [
+            { value: '1,000', label: 'Initial pilot users' },
+            { value: '~$50', label: 'Avg. first transaction' },
+            { value: 'Safaricom', label: 'Telecom innovator' },
+            { value: 'DFID', label: 'Development funder' },
+          ]
+        }
+      },
+      {
+        key: 'early-adopters', name: 'Early Adopters', pct: '13.5%',
+        color: 0x38bdf8, range: [-2.0, -0.67],
+        theory: 'Early adopters are opinion leaders within their communities. They evaluate innovations deliberately and their endorsement reduces uncertainty for others. In developing economies, these are village heads, micro-enterprise owners, and community health workers who serve as bridges between innovation and mainstream adoption.',
+        case: {
+          title: 'Grameen Shakti Solar — Bangladesh',
+          region: 'South Asia • Off-Grid Renewable Energy',
+          stats: [
+            { value: '6M+', label: 'Solar home systems' },
+            { value: '20M', label: 'Beneficiaries' },
+            { value: '45%', label: 'Women technicians' },
+            { value: '$4/mo', label: 'Avg. payment plan' },
+          ]
+        }
+      },
+      {
+        key: 'early-majority', name: 'Early Majority', pct: '34%',
+        color: 0x34d399, range: [-0.67, 0.67],
+        theory: 'The early majority adopts just before the average member. They are deliberate and need evidence of proven benefit. This segment often represents the "tipping point" — once crossed, adoption becomes self-sustaining. In development contexts, reaching this threshold typically requires infrastructure buildout and regulatory support.',
+        case: {
+          title: 'Mobile Internet — Sub-Saharan Africa',
+          region: 'Sub-Saharan Africa • Digital Connectivity',
+          stats: [
+            { value: '527M', label: 'Mobile subscribers' },
+            { value: '28%', label: 'Smartphone penetration' },
+            { value: '$3.50', label: 'Avg. monthly data cost' },
+            { value: '2030', label: '50% smartphone target' },
+          ]
+        }
+      },
+      {
+        key: 'late-majority', name: 'Late Majority', pct: '34%',
+        color: 0xfbbf24, range: [0.67, 2.0],
+        theory: 'The late majority is skeptical and adopts due to economic necessity or peer pressure. In developing nations, this group often requires subsidies, mandates, or significant cost reduction. Their adoption signals that the technology has become a social norm rather than an innovation.',
+        case: {
+          title: 'Digital Payments — Rural India',
+          region: 'South Asia • Financial Inclusion',
+          stats: [
+            { value: '$2.2T', label: 'UPI transactions/yr' },
+            { value: '350M', label: 'Rural digital users' },
+            { value: '78%', label: 'Aadhaar-linked accounts' },
+            { value: '₹0', label: 'Transaction cost (UPI)' },
+          ]
+        }
+      },
+      {
+        key: 'laggards', name: 'Laggards', pct: '16%',
+        color: 0xf87171, range: [2.0, 3.5],
+        theory: 'Laggards are the last to adopt, often facing structural barriers: poverty, illiteracy, geographic isolation, or institutional exclusion. In development economics, "laggard" populations reveal systemic failures — not individual resistance. Reaching them requires targeted interventions, last-mile infrastructure, and inclusive design.',
+        case: {
+          title: 'The Globally Unbanked — LDCs',
+          region: 'Global • Financial Exclusion',
+          stats: [
+            { value: '1.4B', label: 'Unbanked adults' },
+            { value: '56%', label: 'Are women' },
+            { value: '40%', label: 'In Sub-Saharan Africa' },
+            { value: '<$2/day', label: 'Majority income level' },
+          ]
+        }
+      }
+    ];
+
+    // ── Scene Setup ──────────────────────────────────────
+    const canvas = document.getElementById('main-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x060b18, 1);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x060b18, 0.035);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 4.5, 10);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.4;
+    controls.target.set(0, 1.5, 0);
+    controls.minDistance = 5;
+    controls.maxDistance = 25;
+    controls.maxPolarAngle = Math.PI * 0.75;
+    controls.minPolarAngle = Math.PI * 0.1;
+
+    // ── Lighting ─────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    mainLight.position.set(5, 8, 5);
+    scene.add(mainLight);
+
+    const fillLight = new THREE.DirectionalLight(0x8b9dc3, 0.4);
+    fillLight.position.set(-5, 3, -5);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.3);
+    rimLight.position.set(0, 2, -8);
+    scene.add(rimLight);
+
+    // Colored point lights at each segment
+    const segColors = [0xa78bfa, 0x38bdf8, 0x34d399, 0xfbbf24, 0xf87171];
+    const segXCenters = [];
+    SEGMENTS.forEach((seg, i) => {
+      const xc = (seg.range[0] + seg.range[1]) / 2;
+      segXCenters.push(xc);
+      const pl = new THREE.PointLight(seg.color, 0.3, 8);
+      pl.position.set(xc, 3, 0);
+      scene.add(pl);
+    });
+
+    // ── Gaussian Function ─────────────────────────────────
+    function gaussian(x, mu = 0, sigma = 1) {
+      return (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((x - mu) / sigma) ** 2);
+    }
+
+    const SCALE_Y = 8; // Height multiplier
+    const DEPTH = 2.5; // Extrusion depth
+
+    // ── Build Bell Curve Segments ─────────────────────────
+    const bellGroup = new THREE.Group();
+    const segmentMeshes = [];
+
+    SEGMENTS.forEach((seg, i) => {
+      const shape = new THREE.Shape();
+      const steps = 120;
+      const xStart = seg.range[0];
+      const xEnd = seg.range[1];
+      const dx = (xEnd - xStart) / steps;
+
+      shape.moveTo(xStart, 0);
+      for (let j = 0; j <= steps; j++) {
+        const x = xStart + dx * j;
+        const y = gaussian(x) * SCALE_Y;
+        shape.lineTo(x, y);
+      }
+      shape.lineTo(xEnd, 0);
+      shape.lineTo(xStart, 0);
+
+      const extrudeSettings = {
+        depth: DEPTH,
+        bevelEnabled: true,
+        bevelThickness: 0.04,
+        bevelSize: 0.04,
+        bevelSegments: 3,
+      };
+
+      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      const color = new THREE.Color(seg.color);
+
+      const material = new THREE.MeshPhysicalMaterial({
+        color: color,
+        metalness: 0.05,
+        roughness: 0.35,
+        transparent: true,
+        opacity: 0.82,
+        emissive: color,
+        emissiveIntensity: 0.08,
+        clearcoat: 0.3,
+        clearcoatRoughness: 0.4,
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData = { segmentIndex: i, baseEmissive: 0.08, baseOpacity: 0.82 };
+
+      // Center the extrusion depth
+      mesh.position.z = -DEPTH / 2;
+      bellGroup.add(mesh);
+      segmentMeshes.push(mesh);
+    });
+
+    scene.add(bellGroup);
+
+    // ── S-Curve (Cumulative) ──────────────────────────────
+    function cumulativeGaussian(x) {
+      // Approximation of CDF
+      const t = 1 / (1 + 0.2316419 * Math.abs(x));
+      const d = 0.3989422804 * Math.exp(-x * x / 2);
+      const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+      return x > 0 ? 1 - p : p;
+    }
+
+    const sCurvePoints = [];
+    for (let i = 0; i <= 200; i++) {
+      const x = -3.5 + (7 * i / 200);
+      const y = cumulativeGaussian(x) * SCALE_Y * gaussian(0) * 0.95;
+      sCurvePoints.push(new THREE.Vector3(x, y + 0.05, DEPTH / 2 + 0.3));
+    }
+
+    const sCurve = new THREE.CatmullRomCurve3(sCurvePoints);
+    const sCurveGeo = new THREE.TubeGeometry(sCurve, 200, 0.025, 8, false);
+    const sCurveMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.25,
+    });
+    const sCurveMesh = new THREE.Mesh(sCurveGeo, sCurveMat);
+    scene.add(sCurveMesh);
+
+    // S-Curve label dots at thresholds
+    const thresholds = [
+      { x: -2.0, label: '2.5%', color: 0xa78bfa },
+      { x: -1.0, label: '16%', color: 0x38bdf8 },
+      { x: 0, label: '50%', color: 0x34d399 },
+      { x: 1.0, label: '84%', color: 0xfbbf24 },
+    ];
+    thresholds.forEach(th => {
+      const y = cumulativeGaussian(th.x) * SCALE_Y * gaussian(0) * 0.95;
+      const dot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 16, 16),
+        new THREE.MeshBasicMaterial({ color: th.color })
+      );
+      dot.position.set(th.x, y + 0.05, DEPTH / 2 + 0.3);
+      scene.add(dot);
+    });
+
+    // ── Grid / Ground ─────────────────────────────────────
+    const gridHelper = new THREE.GridHelper(30, 30, 0x1a2744, 0x0f1a2e);
+    gridHelper.position.y = -0.01;
+    scene.add(gridHelper);
+
+    // Axis labels on ground
+    const axisMat = new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.4 });
+    [-3, -2, -1, 0, 1, 2, 3].forEach(x => {
+      const pts = [new THREE.Vector3(x, 0, -DEPTH), new THREE.Vector3(x, 0, DEPTH)];
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), axisMat));
+    });
+
+    // ── Particles ─────────────────────────────────────────
+    const PARTICLE_COUNT = 400;
+    const particlePositions = new Float32Array(PARTICLE_COUNT * 3);
+    const particleColors = new Float32Array(PARTICLE_COUNT * 3);
+    const particleSizes = new Float32Array(PARTICLE_COUNT);
+    const particleData = [];
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particleData.push({
+        progress: Math.random(),
+        speed: 0.001 + Math.random() * 0.003,
+        yOffset: (Math.random() - 0.5) * 0.4,
+        zOffset: (Math.random() - 0.5) * DEPTH,
+      });
+      particleSizes[i] = 2 + Math.random() * 3;
+    }
+
+    const particleGeo = new THREE.BufferGeometry();
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+    particleGeo.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+
+    const particleMat = new THREE.PointsMaterial({
+      size: 3,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.6,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    const particles = new THREE.Points(particleGeo, particleMat);
+    scene.add(particles);
+
+    function getSegmentColor(x) {
+      for (let i = 0; i < SEGMENTS.length; i++) {
+        if (x >= SEGMENTS[i].range[0] && x <= SEGMENTS[i].range[1]) {
+          return new THREE.Color(SEGMENTS[i].color);
+        }
+      }
+      return new THREE.Color(0x38bdf8);
+    }
+
+    // ── Starfield ─────────────────────────────────────────
+    const starCount = 3000;
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const r = 50 + Math.random() * 100;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      starPositions[i * 3 + 2] = r * Math.cos(phi);
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
+      color: 0xffffff, size: 0.15, transparent: true, opacity: 0.4, sizeAttenuation: true
+    })));
+
+    // ── Segment Labels (3D) ───────────────────────────────
+    // We'll use sprite labels
+    function createTextSprite(text, color, size = 0.8) {
+      const cvs = document.createElement('canvas');
+      const ctx = cvs.getContext('2d');
+      cvs.width = 512; cvs.height = 128;
+      ctx.font = 'bold 42px "Space Grotesk", sans-serif';
+      ctx.fillStyle = '#' + new THREE.Color(color).getHexString();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 256, 50);
+      ctx.font = '28px "Inter", sans-serif';
+      ctx.fillStyle = '#94a3b8';
+      ctx.textBaseline = 'middle';
+
+      const tex = new THREE.CanvasTexture(cvs);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.85, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(size * 3, size * 0.75, 1);
+      return sprite;
+    }
+
+    SEGMENTS.forEach((seg, i) => {
+      const xc = (seg.range[0] + seg.range[1]) / 2;
+      const yTop = gaussian(xc) * SCALE_Y + 0.6;
+      const sprite = createTextSprite(seg.name, seg.color, 0.55);
+      sprite.position.set(xc, yTop, DEPTH / 2 + 0.5);
+      scene.add(sprite);
+
+      // Percentage label
+      const pctSprite = createTextSprite(seg.pct, 0xffffff, 0.35);
+      pctSprite.position.set(xc, yTop - 0.45, DEPTH / 2 + 0.5);
+      scene.add(pctSprite);
+    });
+
+    // ── Raycasting / Interaction ──────────────────────────
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let activeSegment = -1;
+    let hoveredSegment = -1;
+
+    canvas.addEventListener('pointermove', (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    });
+
+    canvas.addEventListener('click', () => {
+      if (hoveredSegment >= 0) {
+        selectSegment(hoveredSegment);
+      }
+    });
+
+    // Left panel card clicks
+    document.querySelectorAll('.segment-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const idx = parseInt(card.dataset.index);
+        selectSegment(idx);
+      });
+    });
+
+    // Detail close
+    document.getElementById('detail-close').addEventListener('click', () => {
+      deselectSegment();
+    });
+
+    function selectSegment(idx) {
+      activeSegment = idx;
+      const seg = SEGMENTS[idx];
+
+      // Update detail panel
+      const detail = document.getElementById('segment-detail');
+      document.getElementById('detail-title').textContent = seg.name;
+      document.getElementById('detail-title').style.color = '#' + new THREE.Color(seg.color).getHexString();
+      document.getElementById('detail-pct').textContent = seg.pct;
+      document.getElementById('detail-pct').style.color = '#' + new THREE.Color(seg.color).getHexString();
+      document.getElementById('detail-theory').textContent = seg.theory;
+      document.getElementById('case-title').textContent = seg.case.title;
+      document.getElementById('case-region').textContent = seg.case.region;
+
+      const statsEl = document.getElementById('case-stats');
+      statsEl.innerHTML = seg.case.stats.map(s =>
+        `<div class="case-stat"><div class="stat-value" style="color:#${new THREE.Color(seg.color).getHexString()}">${s.value}</div><div class="stat-label">${s.label}</div></div>`
+      ).join('');
+
+      detail.classList.add('visible');
+
+      // Highlight left panel card
+      document.querySelectorAll('.segment-card').forEach((c, i) => {
+        c.classList.toggle('active', i === idx);
+      });
+
+      // Camera focus
+      const xc = (seg.range[0] + seg.range[1]) / 2;
+      controls.autoRotate = false;
+      gsapTo(controls.target, { x: xc, y: 1.5, z: 0 }, 0.02);
+    }
+
+    function deselectSegment() {
+      activeSegment = -1;
+      document.getElementById('segment-detail').classList.remove('visible');
+      document.querySelectorAll('.segment-card').forEach(c => c.classList.remove('active'));
+      controls.autoRotate = true;
+      gsapTo(controls.target, { x: 0, y: 1.5, z: 0 }, 0.02);
+    }
+
+    // Simple lerp helper (no dependency)
+    function gsapTo(obj, target, speed) {
+      obj._target = target;
+      obj._speed = speed;
+    }
+
+    function lerpTargets(obj) {
+      if (!obj._target) return;
+      let done = true;
+      for (const k in obj._target) {
+        const diff = obj._target[k] - obj[k];
+        if (Math.abs(diff) > 0.001) {
+          obj[k] += diff * obj._speed;
+          done = false;
+        }
+      }
+      if (done) obj._target = null;
+    }
+
+    // ── Animation Loop ────────────────────────────────────
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+      const dt = clock.getDelta();
+
+      // Controls
+      controls.update();
+      lerpTargets(controls.target);
+
+      // Raycasting
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(segmentMeshes);
+      hoveredSegment = -1;
+
+      segmentMeshes.forEach((mesh, i) => {
+        const isActive = activeSegment === i;
+        const targetEmissive = isActive ? 0.25 : mesh.userData.baseEmissive;
+        const targetOpacity = isActive ? 0.95 : mesh.userData.baseOpacity;
+        mesh.material.emissiveIntensity += (targetEmissive - mesh.material.emissiveIntensity) * 0.08;
+        mesh.material.opacity += (targetOpacity - mesh.material.opacity) * 0.08;
+      });
+
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        const idx = hit.userData.segmentIndex;
+        hoveredSegment = idx;
+        hit.material.emissiveIntensity += (0.3 - hit.material.emissiveIntensity) * 0.15;
+        hit.material.opacity += (0.95 - hit.material.opacity) * 0.15;
+        canvas.style.cursor = 'pointer';
+      } else {
+        canvas.style.cursor = 'default';
+      }
+
+      // Particles
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const pd = particleData[i];
+        pd.progress += pd.speed;
+        if (pd.progress > 1) {
+          pd.progress = 0;
+          pd.speed = 0.001 + Math.random() * 0.003;
+          pd.yOffset = (Math.random() - 0.5) * 0.4;
+          pd.zOffset = (Math.random() - 0.5) * DEPTH;
+        }
+
+        const x = -3.5 + pd.progress * 7;
+        const y = gaussian(x) * SCALE_Y + pd.yOffset;
+        const z = pd.zOffset;
+
+        particlePositions[i * 3] = x;
+        particlePositions[i * 3 + 1] = y + 0.1;
+        particlePositions[i * 3 + 2] = z;
+
+        const col = getSegmentColor(x);
+        particleColors[i * 3] = col.r;
+        particleColors[i * 3 + 1] = col.g;
+        particleColors[i * 3 + 2] = col.b;
+      }
+      particleGeo.attributes.position.needsUpdate = true;
+      particleGeo.attributes.color.needsUpdate = true;
+
+      // Gentle breathing
+      bellGroup.position.y = Math.sin(elapsed * 0.5) * 0.03;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // ── Resize ────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ── Clock ─────────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent =
+        now.toLocaleTimeString('en-US', { hour12: false });
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── Progress bar animation ────────────────────────────
+    setTimeout(() => {
+      document.querySelectorAll('.progress-fill').forEach(el => {
+        el.style.width = el.dataset.target + '%';
+      });
+    }, 500);
+
+    // ── Hide instructions ─────────────────────────────────
+    setTimeout(() => {
+      document.getElementById('instructions').classList.add('hidden');
+    }, 8000);
+  </script>
+</body>
+</html>
