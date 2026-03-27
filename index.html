@@ -933,7 +933,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x060b18, 1);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 0.8;
 
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x060b18, 0.018);
@@ -953,21 +953,21 @@
     controls.minPolarAngle = Math.PI * 0.1;
 
     // ── Lighting ─────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-    const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
     mainLight.position.set(5, 10, 8);
     scene.add(mainLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8b9dc3, 0.6);
+    const fillLight = new THREE.DirectionalLight(0x8b9dc3, 0.35);
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
 
-    const frontLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    const frontLight = new THREE.DirectionalLight(0xffffff, 0.3);
     frontLight.position.set(0, 2, 10);
     scene.add(frontLight);
 
-    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.2);
     rimLight.position.set(0, 2, -8);
     scene.add(rimLight);
 
@@ -1057,21 +1057,19 @@
       geo.setIndex(indices);
 
       const color = new THREE.Color(seg.color);
-      const material = new THREE.MeshPhysicalMaterial({
+      const material = new THREE.MeshStandardMaterial({
         color: color,
-        metalness: 0.2,
-        roughness: 0.2,
+        metalness: 0.1,
+        roughness: 0.55,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.92,
         emissive: color,
-        emissiveIntensity: 0.12,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.2,
+        emissiveIntensity: 0.08,
         side: THREE.DoubleSide,
       });
 
       const mesh = new THREE.Mesh(geo, material);
-      mesh.userData = { segmentIndex: i, baseEmissive: 0.12, baseOpacity: 0.9 };
+      mesh.userData = { segmentIndex: i, baseEmissive: 0.08, baseOpacity: 0.92 };
       bellGroup.add(mesh);
       segmentMeshes.push(mesh);
 
@@ -1087,7 +1085,7 @@
     scene.add(gridHelper);
 
     // ── Particles ─────────────────────────────────────────
-    const PARTICLE_COUNT = 400;
+    const PARTICLE_COUNT = 200;
     const particlePositions = new Float32Array(PARTICLE_COUNT * 3);
     const particleColors = new Float32Array(PARTICLE_COUNT * 3);
     const particleSizes = new Float32Array(PARTICLE_COUNT);
@@ -1100,7 +1098,7 @@
         yOffset: (Math.random() - 0.5) * 0.4,
         zOffset: (Math.random() - 0.5) * Z_WIDTH * 0.6,
       });
-      particleSizes[i] = 2 + Math.random() * 3;
+      particleSizes[i] = 1.5 + Math.random() * 2;
     }
 
     const particleGeo = new THREE.BufferGeometry();
@@ -1109,12 +1107,12 @@
     particleGeo.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
 
     const particleMat = new THREE.PointsMaterial({
-      size: 3,
+      size: 2,
       sizeAttenuation: true,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.5,
       vertexColors: true,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
       depthWrite: false,
     });
 
