@@ -963,24 +963,14 @@
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
 
-    const frontLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    frontLight.position.set(0, 2, 10);
-    scene.add(frontLight);
+    // Front light removed to prevent flat-face blowout
 
     const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.2);
     rimLight.position.set(0, 2, -8);
     scene.add(rimLight);
 
-    // Colored point lights at each segment
-    const segColors = [0xa78bfa, 0x38bdf8, 0x34d399, 0xfbbf24, 0xf87171];
-    const segXCenters = [];
-    SEGMENTS.forEach((seg, i) => {
-      const xc = (seg.range[0] + seg.range[1]) / 2;
-      segXCenters.push(xc);
-      const pl = new THREE.PointLight(seg.color, 0.3, 8);
-      pl.position.set(xc, 3, 0);
-      scene.add(pl);
-    });
+    // Segment center positions (for camera targeting)
+    const segXCenters = SEGMENTS.map(seg => (seg.range[0] + seg.range[1]) / 2);
 
     // ── Gaussian Function ─────────────────────────────────
     function gaussian(x, mu = 0, sigma = 1) {
@@ -1080,50 +1070,6 @@
     gridHelper.material.transparent = true;
     gridHelper.material.opacity = 0.4;
     scene.add(gridHelper);
-
-    // ── Particles ─────────────────────────────────────────
-    const PARTICLE_COUNT = 200;
-    const particlePositions = new Float32Array(PARTICLE_COUNT * 3);
-    const particleColors = new Float32Array(PARTICLE_COUNT * 3);
-    const particleSizes = new Float32Array(PARTICLE_COUNT);
-    const particleData = [];
-
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      particleData.push({
-        progress: Math.random(),
-        speed: 0.001 + Math.random() * 0.003,
-        yOffset: (Math.random() - 0.5) * 0.4,
-        zOffset: (Math.random() - 0.5) * Z_WIDTH * 0.6,
-      });
-      particleSizes[i] = 1.5 + Math.random() * 2;
-    }
-
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
-    particleGeo.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
-
-    const particleMat = new THREE.PointsMaterial({
-      size: 2,
-      sizeAttenuation: true,
-      transparent: true,
-      opacity: 0.5,
-      vertexColors: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false,
-    });
-
-    const particles = new THREE.Points(particleGeo, particleMat);
-    scene.add(particles);
-
-    function getSegmentColor(x) {
-      for (let i = 0; i < SEGMENTS.length; i++) {
-        if (x >= SEGMENTS[i].range[0] && x <= SEGMENTS[i].range[1]) {
-          return new THREE.Color(SEGMENTS[i].color);
-        }
-      }
-      return new THREE.Color(0x38bdf8);
-    }
 
     // ── Starfield ─────────────────────────────────────────
     const starCount = 3000;
@@ -1265,33 +1211,6 @@
       } else {
         canvas.style.cursor = 'default';
       }
-
-      // Particles
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
-        const pd = particleData[i];
-        pd.progress += pd.speed;
-        if (pd.progress > 1) {
-          pd.progress = 0;
-          pd.speed = 0.001 + Math.random() * 0.003;
-          pd.yOffset = (Math.random() - 0.5) * 0.4;
-          pd.zOffset = (Math.random() - 0.5) * Z_WIDTH * 0.6;
-        }
-
-        const x = -3.5 + pd.progress * 7;
-        const z = pd.zOffset;
-        const y = heightAt(x, z) + pd.yOffset * 0.3 + 0.15;
-
-        particlePositions[i * 3] = x;
-        particlePositions[i * 3 + 1] = y + 0.1;
-        particlePositions[i * 3 + 2] = z;
-
-        const col = getSegmentColor(x);
-        particleColors[i * 3] = col.r;
-        particleColors[i * 3 + 1] = col.g;
-        particleColors[i * 3 + 2] = col.b;
-      }
-      particleGeo.attributes.position.needsUpdate = true;
-      particleGeo.attributes.color.needsUpdate = true;
 
       // Gentle breathing
       bellGroup.position.y = Math.sin(elapsed * 0.5) * 0.03;
